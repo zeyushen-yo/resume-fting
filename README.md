@@ -24,3 +24,4 @@ Notes
 - Evaluation supports abstention: the model may answer that two resumes are equally qualified.
 
 
+# resume_validity
