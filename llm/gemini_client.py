@@ -89,5 +89,3 @@ class GeminiClient:
             return "OK" in txt.upper()
         except Exception:
             return False
-
-

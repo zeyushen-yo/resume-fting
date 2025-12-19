@@ -20,6 +20,7 @@ def main():
     ap.add_argument("--max_jobs_per_company", type=int, default=100)
     ap.add_argument("--restrict_top_roles", action="store_true", help="Apply top-5 roles with <=2 CS-related roles")
     ap.add_argument("--roles", type=str, default="", help="Comma-separated roles to target; overrides top-roles selection")
+    ap.add_argument("--title_filter", type=str, default="", help="Normalized job title to include; others skipped")
     ap.add_argument("--require_basic", type=int, default=3)
     ap.add_argument("--require_bonus", type=int, default=3)
     ap.add_argument("--per_role_target", type=int, default=100)
@@ -36,6 +37,102 @@ def main():
     posts = fetch_greenhouse_jobs(companies, max_jobs_per_company=args.max_jobs_per_company)
     if not posts:
         print("No posts fetched.")
+        return
+
+    # Local helpers to avoid heavy cross-imports
+    import re
+    def normalize_title(title: str) -> str:
+        t = (title or "").strip().lower()
+        t = re.sub(r"\s+", " ", t)
+        t = re.sub(r"\b(senior|sr\.|staff|principal|lead|ii|iii|iv|v)\b", "", t)
+        t = re.sub(r"\s+", " ", t).strip()
+        return t or "unknown"
+
+    # Title-filtered mode: focus harvesting on a single normalized title
+    if args.title_filter:
+        target_norm = normalize_title(args.title_filter)
+        def is_match(p_title: str) -> bool:
+            cand = normalize_title(p_title)
+            if cand == target_norm:
+                return True
+            # Relaxed matching: allow substring/prefix to include variants like
+            # "software engineer - backend" under "software engineer"
+            if cand.startswith(target_norm):
+                return True
+            if target_norm in cand:
+                return True
+            # Token subset: all target tokens must be present in candidate
+            t_tokens = set(target_norm.split())
+            c_tokens = set(cand.split())
+            if t_tokens and t_tokens.issubset(c_tokens):
+                return True
+            return False
+        filtered = [p for p in posts if is_match(p.title)]
+        if not filtered:
+            print(f"No postings matched title '{args.title_filter}' (normalized='{target_norm}').")
+            return
+
+        slug = target_norm.replace(" ", "_")
+        passing_path = out_dir / f"passing_{slug}.jsonl"
+
+        gemini = GeminiClient()
+        count_written = 0
+        # line-buffered for log
+        log_fp = open(log_path, "w", encoding="utf-8", buffering=1)
+        writer = open(passing_path, "w", encoding="utf-8", buffering=1)
+        try:
+            print(f"Scanning title '{target_norm}': {len(filtered)} postings")
+            for p in filtered:
+                if count_written >= args.per_role_target:
+                    break
+                try:
+                    quals = extract_qualifications(gemini, p.content_text)
+                    basic = [q.text for q in (quals.get("basic") or []) if getattr(q, "text", "").strip()]
+                    bonus = [q.text for q in (quals.get("bonus") or []) if getattr(q, "text", "").strip()]
+                    bc, vc = len(basic), len(bonus)
+                    row = {
+                        "role": target_norm,
+                        "title_norm": target_norm,
+                        "original_role": map_title_to_role(p.title),
+                        "source": p.source,
+                        "company": p.company,
+                        "title": p.title,
+                        "url": p.url,
+                        "basic": basic,
+                        "bonus": bonus,
+                        "basic_count": bc,
+                        "validity_count": vc,
+                        "pass": (bc >= args.require_basic and vc >= args.require_bonus),
+                    }
+                    log_fp.write(json.dumps(row) + "\n"); log_fp.flush()
+                    if row["pass"]:
+                        writer.write(json.dumps(row) + "\n"); writer.flush()
+                        count_written += 1
+                        print(f"PASS {target_norm}: bc={bc} vc={vc} url={p.url}")
+                except Exception as e:
+                    log_fp.write(json.dumps({
+                        "title_norm": target_norm, "url": p.url, "error": str(e)
+                    }) + "\n")
+                    print(f"ERROR {target_norm}: {e} url={p.url}")
+        finally:
+            try:
+                writer.close()
+            except Exception:
+                pass
+            log_fp.close()
+
+        summary = {
+            "title_norm": target_norm,
+            "per_title_target": args.per_role_target,
+            "require_basic": args.require_basic,
+            "require_bonus": args.require_bonus,
+            "count": count_written,
+        }
+        with open(summary_path, "w", encoding="utf-8") as sf:
+            json.dump(summary, sf, indent=2)
+        print("\nHarvest summary saved:")
+        print(summary_path)
+        print(json.dumps(summary, indent=2))
         return
 
     if args.roles:

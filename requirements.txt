@@ -12,4 +12,12 @@ matplotlib==3.9.2
 seaborn==0.13.2
 python-dateutil==2.9.0.post0
 PyYAML==6.0.2
+streamlit>=1.30.0
+
+# Training deps for SFT (install in your environment as needed)
+torch>=2.2.0
+transformers>=4.43.0
+accelerate>=0.33.0
+# Optional for 4-bit quantization; skip if unavailable
+bitsandbytes>=0.43.0
 
