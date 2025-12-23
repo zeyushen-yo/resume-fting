@@ -5,6 +5,7 @@ Generates variants and evaluates against multiple AI models.
 from __future__ import annotations
 import os
 import re
+import time
 import traceback
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
@@ -13,6 +14,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
 from .config import SYSTEM_PROMPT, get_openrouter_key, get_google_key
+
+
+# Retry settings
+MAX_RETRIES = 3
+RETRY_DELAY_BASE = 2  # seconds, will be multiplied by 2^attempt
 
 
 @dataclass
@@ -32,27 +38,69 @@ class StressTestResult:
     qualification_insights: List[Dict[str, Any]] = field(default_factory=list)
 
 
+def _make_api_request(url: str, headers: Dict[str, str], payload: Dict[str, Any], timeout: int = 120) -> Dict[str, Any]:
+    """Make an API request with retry logic."""
+    last_error = None
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code != 200:
+                print(f"API error response (attempt {attempt + 1}): {resp.text}")
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.exceptions.ChunkedEncodingError, 
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as e:
+            last_error = e
+            wait_time = RETRY_DELAY_BASE * (2 ** attempt)
+            print(f"Connection error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            print(f"Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except requests.exceptions.HTTPError as e:
+            # Don't retry on HTTP errors like 400, 401, 403, etc.
+            if resp.status_code in [429, 500, 502, 503, 504]:
+                last_error = e
+                wait_time = RETRY_DELAY_BASE * (2 ** attempt)
+                print(f"Server error {resp.status_code} (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            traceback.print_exc()
+            raise
+    
+    # All retries exhausted
+    raise last_error or RuntimeError("Max retries exhausted")
+
+
 def call_gemini(system_prompt: str, user_prompt: str, temperature: float = 0.3, max_tokens: int = 4096) -> str:
-    """Call Gemini API directly."""
-    api_key = get_google_key()
+    """Call Gemini via OpenRouter with retry logic."""
+    api_key = get_openrouter_key()
     if not api_key:
-        raise RuntimeError("Missing GOOGLE_API_KEY")
+        raise RuntimeError("Missing OPENROUTER_API_KEY")
     
-    model = "models/gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/{model}:generateContent"
-    
+    model_id = "google/gemini-2.0-flash-001"
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
     payload = {
-        "contents": [
-            {"role": "user", "parts": [{"text": system_prompt + "\n\n" + user_prompt}]}
+        "model": model_id,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+        "max_tokens": max_tokens,
+        "temperature": temperature,
     }
     
     try:
-        resp = requests.post(url, params={"key": api_key}, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        data = _make_api_request(url, headers, payload)
+        return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"Gemini API error: {e}")
         traceback.print_exc()
@@ -60,7 +108,7 @@ def call_gemini(system_prompt: str, user_prompt: str, temperature: float = 0.3, 
 
 
 def call_openrouter(model_id: str, messages: List[Dict[str, str]], max_tokens: int = 1024) -> str:
-    """Call OpenRouter API."""
+    """Call OpenRouter API with retry logic."""
     api_key = get_openrouter_key()
     if not api_key:
         raise RuntimeError("Missing OPENROUTER_API_KEY")
@@ -77,9 +125,7 @@ def call_openrouter(model_id: str, messages: List[Dict[str, str]], max_tokens: i
     }
     
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=120)
-        resp.raise_for_status()
-        data = resp.json()
+        data = _make_api_request(url, headers, payload)
         return data["choices"][0]["message"]["content"]
     except Exception as e:
         print(f"OpenRouter API error for {model_id}: {e}")
@@ -120,6 +166,72 @@ def extract_qualifications(job_description: str) -> Dict[str, List[Qualification
                for i in data.get('bonus', []) if i.get('text')]
     
     return {"basic": basics, "bonus": bonuses}
+
+
+def extract_resume_qualifications(resume_text: str) -> List[Qualification]:
+    """Extract qualifications/skills from a resume using Gemini."""
+    system = (
+        "Extract key qualifications, skills, and experiences from a resume.\n"
+        "Focus on concrete, testable qualifications (skills, technologies, years of experience, degrees, certifications).\n"
+        "Return JSON with a 'qualifications' list. Each item: {\"text\": <qualification>}.\n"
+        "Return ONLY valid JSON. No prose, no markdown fences."
+    )
+    user = f"Resume:\n{resume_text}\n\nReturn only JSON with key 'qualifications'."
+    
+    import json
+    text = call_gemini(system, user, temperature=0.1)
+    
+    # Clean up response
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline+1:]
+        text = text.rstrip("`\n ")
+    
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse resume qualifications JSON: {e}")
+        print(f"Raw response: {text[:500]}")
+        return []
+    
+    quals = [Qualification(text=i.get('text', '').strip(), kind='resume') 
+             for i in data.get('qualifications', []) if i.get('text')]
+    
+    return quals
+
+
+def extract_jd_qualifications(job_description: str) -> List[Qualification]:
+    """Extract qualifications from a job description that the candidate might want to add."""
+    system = (
+        "Extract required and preferred qualifications from a job description.\n"
+        "Focus on concrete, testable qualifications (skills, technologies, years of experience, degrees, certifications).\n"
+        "Return JSON with a 'qualifications' list. Each item: {\"text\": <qualification>}.\n"
+        "Return ONLY valid JSON. No prose, no markdown fences."
+    )
+    user = f"Job Description:\n{job_description}\n\nReturn only JSON with key 'qualifications'."
+    
+    import json
+    text = call_gemini(system, user, temperature=0.1)
+    
+    # Clean up response
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline+1:]
+        text = text.rstrip("`\n ")
+    
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse JD qualifications JSON: {e}")
+        print(f"Raw response: {text[:500]}")
+        return []
+    
+    quals = [Qualification(text=i.get('text', '').strip(), kind='jd') 
+             for i in data.get('qualifications', []) if i.get('text')]
+    
+    return quals
 
 
 def clean_resume_to_markdown(raw_resume: str) -> str:
@@ -279,6 +391,11 @@ def run_stress_test(
     """
     Run a full stress test on a resume.
     
+    New logic:
+    - For each qualification IN THE RESUME: remove it and test if models notice
+    - For each qualification IN THE JD: add it to resume and test if models value it
+    - One reworded test for phrasing sensitivity
+    
     Args:
         resume_text: The user's resume (raw or markdown)
         job_description: The target job description
@@ -295,94 +412,127 @@ def run_stress_test(
         variants={},
     )
     
-    total_steps = 6 + len(models) * 3  # cleanup + quals + 3 variants + 3 evals per model
+    # Step 1: Clean up resume first (needed for qualification extraction)
     current_step = 0
     
     def update_progress(message: str):
         nonlocal current_step
         current_step += 1
         if progress_callback:
-            progress_callback(current_step, total_steps, message)
+            # We'll update total_steps once we know the counts
+            total = getattr(update_progress, 'total', 100)
+            # Clamp step to not exceed total to avoid Streamlit progress bar errors
+            clamped_step = min(current_step, total)
+            progress_callback(clamped_step, total, message)
     
-    # Step 1: Clean up resume
     update_progress("Cleaning and formatting your resume...")
     base_resume = clean_resume_to_markdown(resume_text)
     result.variants["original"] = base_resume
     
-    # Step 2: Extract qualifications from job description
+    # Step 2: Extract qualifications from RESUME (things to potentially remove)
+    update_progress("Extracting qualifications from your resume...")
+    resume_quals = extract_resume_qualifications(base_resume)
+    
+    # Step 3: Extract qualifications from JD (things to potentially add)
     update_progress("Extracting qualifications from job description...")
-    qualifications = extract_qualifications(job_description)
-    result.qualifications = qualifications
+    jd_quals = extract_jd_qualifications(job_description)
     
-    # Step 3: Generate underqualified variant (remove first basic qualification)
-    if qualifications["basic"]:
-        removed_qual = qualifications["basic"][0]
-        update_progress(f"Generating underqualified variant (removing: {removed_qual.text[:50]}...)")
-        result.variants["underqualified"] = generate_underqualified_variant(base_resume, removed_qual.text)
-        result.variants["underqualified_removed"] = removed_qual.text
-    else:
-        update_progress("Skipping underqualified variant (no basic qualifications found)")
-        result.variants["underqualified"] = base_resume
-        result.variants["underqualified_removed"] = ""
+    # Store qualifications in result
+    result.qualifications = {
+        "resume": resume_quals,  # From resume - will be removed to test
+        "jd": jd_quals,          # From JD - will be added to test
+    }
     
-    # Step 4: Generate preferred variant (add first bonus qualification)
-    if qualifications["bonus"]:
-        added_qual = qualifications["bonus"][0]
-        update_progress(f"Generating preferred variant (adding: {added_qual.text[:50]}...)")
-        result.variants["preferred"] = generate_preferred_variant(base_resume, added_qual.text)
-        result.variants["preferred_added"] = added_qual.text
-    else:
-        update_progress("Skipping preferred variant (no bonus qualifications found)")
-        result.variants["preferred"] = base_resume
-        result.variants["preferred_added"] = ""
+    num_resume_quals = len(resume_quals)
+    num_jd_quals = len(jd_quals)
+    num_models = len(models)
     
-    # Step 5: Generate reworded variant
-    update_progress("Generating reworded variant...")
-    result.variants["reworded"] = generate_reworded_variant(base_resume)
+    # Calculate total steps now that we know the counts
+    # Steps: 
+    #   - 3 initial (cleanup + 2 extractions)
+    #   - num_resume_quals (removed variants)
+    #   - num_jd_quals (added variants)
+    #   - 3 (reworded variants)
+    #   - (num_resume_quals + num_jd_quals + 3) * num_models (evaluations)
+    NUM_REWORDED_VARIANTS = 3
+    total_variants = num_resume_quals + num_jd_quals + NUM_REWORDED_VARIANTS
+    update_progress.total = 3 + total_variants + (total_variants * num_models)
     
-    # Step 6: Evaluate with each model
+    # Step 4: Generate "removed" variants - remove each qualification FROM RESUME
+    removed_variants = []  # List of (qual_text, variant_resume)
+    for i, qual in enumerate(resume_quals):
+        update_progress(f"Testing removal {i+1}/{num_resume_quals}: '{qual.text[:40]}...'")
+        variant = generate_underqualified_variant(base_resume, qual.text)
+        removed_variants.append((qual.text, variant))
+    result.variants["removed_list"] = removed_variants
+    
+    # Step 5: Generate "added" variants - add each qualification FROM JD
+    added_variants = []  # List of (qual_text, variant_resume)
+    for i, qual in enumerate(jd_quals):
+        update_progress(f"Testing addition {i+1}/{num_jd_quals}: '{qual.text[:40]}...'")
+        variant = generate_preferred_variant(base_resume, qual.text)
+        added_variants.append((qual.text, variant))
+    result.variants["added_list"] = added_variants
+    
+    # Step 6: Generate 3 reworded variants (for equal pairs / discriminant validity)
+    NUM_REWORDED_VARIANTS = 3
+    reworded_variants = []
+    for i in range(NUM_REWORDED_VARIANTS):
+        update_progress(f"Generating reworded variant {i+1}/{NUM_REWORDED_VARIANTS}...")
+        reworded_variants.append(generate_reworded_variant(base_resume))
+    result.variants["reworded_list"] = reworded_variants
+    
+    # Step 7: Evaluate ALL variants with each model
     for model in models:
         model_name = model["name"]
         model_id = model["id"]
         
-        # Test 1: Original vs Underqualified (should pick original = "first")
-        update_progress(f"{model_name}: Testing original vs underqualified...")
-        eval_under = evaluate_pair(
-            model_id,
-            base_resume,
-            result.variants["underqualified"],
-            job_description,
-            expected_winner="first"
-        )
-        eval_under["test_type"] = "underqualified"
-        eval_under["model_name"] = model_name
-        result.model_results.append(eval_under)
+        # Test all "removed" variants - original should win (first)
+        # Because we're comparing: original (with qual) vs variant (without qual)
+        for qual_text, variant in removed_variants:
+            update_progress(f"{model_name}: Testing without '{qual_text[:30]}...'")
+            eval_result = evaluate_pair(
+                model_id,
+                base_resume,  # Original with the qualification
+                variant,      # Variant without the qualification
+                job_description,
+                expected_winner="first"  # Original should be preferred
+            )
+            eval_result["test_type"] = "removed"
+            eval_result["qualification"] = qual_text
+            eval_result["model_name"] = model_name
+            result.model_results.append(eval_result)
         
-        # Test 2: Original vs Preferred (should pick preferred = "second")
-        update_progress(f"{model_name}: Testing original vs preferred...")
-        eval_pref = evaluate_pair(
-            model_id,
-            base_resume,
-            result.variants["preferred"],
-            job_description,
-            expected_winner="second"
-        )
-        eval_pref["test_type"] = "preferred"
-        eval_pref["model_name"] = model_name
-        result.model_results.append(eval_pref)
+        # Test all "added" variants - enhanced should win (second)
+        # Because we're comparing: original (without qual) vs variant (with qual)
+        for qual_text, variant in added_variants:
+            update_progress(f"{model_name}: Testing with '{qual_text[:30]}...'")
+            eval_result = evaluate_pair(
+                model_id,
+                base_resume,  # Original without the JD qualification
+                variant,      # Variant with the JD qualification added
+                job_description,
+                expected_winner="second"  # Enhanced should be preferred
+            )
+            eval_result["test_type"] = "added"
+            eval_result["qualification"] = qual_text
+            eval_result["model_name"] = model_name
+            result.model_results.append(eval_result)
         
-        # Test 3: Original vs Reworded (should be roughly equal)
-        update_progress(f"{model_name}: Testing original vs reworded...")
-        eval_reword = evaluate_pair(
-            model_id,
-            base_resume,
-            result.variants["reworded"],
-            job_description,
-            expected_winner="either"
-        )
-        eval_reword["test_type"] = "reworded"
-        eval_reword["model_name"] = model_name
-        result.model_results.append(eval_reword)
+        # Test all reworded variants (should be roughly equal - for discriminant validity)
+        for i, reworded_variant in enumerate(reworded_variants):
+            update_progress(f"{model_name}: Testing reworded version {i+1}/{NUM_REWORDED_VARIANTS}...")
+            eval_reword = evaluate_pair(
+                model_id,
+                base_resume,
+                reworded_variant,
+                job_description,
+                expected_winner="either"
+            )
+            eval_reword["test_type"] = "reworded"
+            eval_reword["qualification"] = f"(phrasing variant {i+1})"
+            eval_reword["model_name"] = model_name
+            result.model_results.append(eval_reword)
     
     # Generate insights
     result.qualification_insights = generate_insights(result)
@@ -394,74 +544,101 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
     """Generate human-readable insights from the stress test results."""
     insights = []
     
-    # Count correct decisions per test type
-    test_types = ["underqualified", "preferred", "reworded"]
-    for test_type in test_types:
-        relevant = [r for r in result.model_results if r["test_type"] == test_type]
-        if not relevant:
-            continue
+    # Use new test types: "removed" (from resume) and "added" (from JD)
+    removed_results = [r for r in result.model_results if r["test_type"] == "removed"]
+    added_results = [r for r in result.model_results if r["test_type"] == "added"]
+    reworded_results = [r for r in result.model_results if r["test_type"] == "reworded"]
+    
+    # Analyze "removed" tests - which of YOUR qualifications matter?
+    if removed_results:
+        qual_stats = {}
+        for r in removed_results:
+            qual = r.get("qualification", "unknown")
+            if qual not in qual_stats:
+                qual_stats[qual] = {"correct": 0, "total": 0}
+            qual_stats[qual]["total"] += 1
+            if r["is_correct"]:
+                qual_stats[qual]["correct"] += 1
         
-        correct = sum(1 for r in relevant if r["is_correct"])
-        total = len(relevant)
+        # Find qualifications that ALL models noticed vs NONE noticed
+        all_noticed = [q for q, s in qual_stats.items() if s["correct"] == s["total"]]
+        none_noticed = [q for q, s in qual_stats.items() if s["correct"] == 0]
         
-        if test_type == "underqualified":
-            removed = result.variants.get("underqualified_removed", "a basic qualification")
-            if correct == total:
-                insights.append({
-                    "type": "success",
-                    "icon": "✅",
-                    "message": f"All {total} models correctly identified that removing '{removed[:60]}...' would hurt your application."
-                })
-            elif correct == 0:
-                insights.append({
-                    "type": "warning",
-                    "icon": "⚠️",
-                    "message": f"No models noticed when we removed '{removed[:60]}...' — it may not be as important as expected."
-                })
-            else:
-                insights.append({
-                    "type": "info",
-                    "icon": "📊",
-                    "message": f"{correct}/{total} models noticed when we removed '{removed[:60]}...'."
-                })
+        if all_noticed:
+            insights.append({
+                "type": "success",
+                "icon": "✅",
+                "message": f"Essential resume skills: {len(all_noticed)} of your qualifications were noticed by ALL models when removed. These are your strongest assets!"
+            })
         
-        elif test_type == "preferred":
-            added = result.variants.get("preferred_added", "a bonus qualification")
-            if correct == total:
-                insights.append({
-                    "type": "success",
-                    "icon": "✅",
-                    "message": f"All {total} models recognized that adding '{added[:60]}...' would strengthen your application."
-                })
-            elif correct == 0:
-                insights.append({
-                    "type": "warning",
-                    "icon": "⚠️",
-                    "message": f"No models valued adding '{added[:60]}...' — it might not matter as much as you think."
-                })
-            else:
-                insights.append({
-                    "type": "info",
-                    "icon": "📊",
-                    "message": f"{correct}/{total} models valued adding '{added[:60]}...'."
-                })
+        if none_noticed:
+            insights.append({
+                "type": "warning",
+                "icon": "⚠️",
+                "message": f"Undervalued skills: {len(none_noticed)} of your qualifications weren't noticed when removed. Consider emphasizing them more or they may not matter for this role."
+            })
         
-        elif test_type == "reworded":
-            # For reworded, check if models gave different answers
-            decisions = [r["decision"] for r in relevant]
-            unique = set(decisions)
-            if len(unique) == 1 and "ABSTAIN" in unique:
-                insights.append({
-                    "type": "success",
-                    "icon": "✅",
-                    "message": "All models correctly recognized that a reworded resume is equally qualified."
-                })
-            elif len(unique) > 1:
-                insights.append({
-                    "type": "warning",
-                    "icon": "⚠️",
-                    "message": f"Models disagreed on the reworded version: {dict((d, decisions.count(d)) for d in unique)}. Phrasing matters!"
-                })
+        overall_correct = sum(1 for r in removed_results if r["is_correct"])
+        overall_total = len(removed_results)
+        insights.append({
+            "type": "info",
+            "icon": "📊",
+            "message": f"Resume qualification impact: {overall_correct}/{overall_total} ({int(overall_correct/max(overall_total,1)*100)}%) of your qualifications are valued by AI systems."
+        })
+    
+    # Analyze "added" tests - which JD requirements would help if added?
+    if added_results:
+        qual_stats = {}
+        for r in added_results:
+            qual = r.get("qualification", "unknown")
+            if qual not in qual_stats:
+                qual_stats[qual] = {"correct": 0, "total": 0}
+            qual_stats[qual]["total"] += 1
+            if r["is_correct"]:
+                qual_stats[qual]["correct"] += 1
+        
+        # Find high-value vs low-value JD qualifications
+        all_valued = [q for q, s in qual_stats.items() if s["correct"] == s["total"]]
+        none_valued = [q for q, s in qual_stats.items() if s["correct"] == 0]
+        
+        if all_valued:
+            insights.append({
+                "type": "success",
+                "icon": "🌟",
+                "message": f"High-impact skills to add: {len(all_valued)} JD requirements would be valued by ALL models if added to your resume!"
+            })
+        
+        if none_valued:
+            insights.append({
+                "type": "info",
+                "icon": "💡",
+                "message": f"Lower priority: {len(none_valued)} 'preferred' qualifications weren't valued by any models. May not be worth the effort."
+            })
+    
+    # Analyze reworded tests
+    if reworded_results:
+        decisions = [r["decision"] for r in reworded_results]
+        abstain_count = sum(1 for d in decisions if d == "ABSTAIN")
+        total = len(decisions)
+        
+        if abstain_count == total:
+            insights.append({
+                "type": "success",
+                "icon": "⚖️",
+                "message": "Phrasing-neutral: All models correctly ignored cosmetic differences. Your resume's substance matters more than exact wording."
+            })
+        elif abstain_count == 0:
+            insights.append({
+                "type": "warning",
+                "icon": "🎲",
+                "message": "Phrasing-sensitive: All models were influenced by wording changes. Consider A/B testing different phrasings."
+            })
+        else:
+            insights.append({
+                "type": "info",
+                "icon": "📝",
+                "message": f"Mixed phrasing sensitivity: {abstain_count}/{total} models ignored phrasing, {total-abstain_count} were influenced by it."
+            })
     
     return insights
 

@@ -20,25 +20,18 @@ QUICK_MODELS: List[Dict[str, str]] = [
     {"id": "meta-llama/llama-3.1-8b-instruct", "name": "Llama 3.1 8B", "provider": "Meta"},
 ]
 
-# API keys - set via environment variables or create a local secrets.py file
-# To use: export OPENROUTER_API_KEY="your-key" and export GOOGLE_API_KEY="your-key"
+# API keys - check environment variables first, fall back to hardcoded for local dev
+# For production: set GOOGLE_API_KEY and OPENROUTER_API_KEY environment variables
+_FALLBACK_GOOGLE_KEY = "AIzaSyCRgqljepnc_sf_Fvz8b-In8QMnD7r2WXk"
+_FALLBACK_OPENROUTER_KEY = "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"
+
 def get_openrouter_key() -> str:
-    # Try to import from local secrets file (not committed to git)
-    try:
-        from .secrets import OPENROUTER_API_KEY
-        return OPENROUTER_API_KEY
-    except ImportError:
-        pass
-    return os.environ.get("OPENROUTER_API_KEY", "")
+    """Get OpenRouter API key from environment or fallback."""
+    return os.environ.get("OPENROUTER_API_KEY", _FALLBACK_OPENROUTER_KEY)
 
 def get_google_key() -> str:
-    # Try to import from local secrets file (not committed to git)
-    try:
-        from .secrets import GOOGLE_API_KEY
-        return GOOGLE_API_KEY
-    except ImportError:
-        pass
-    return os.environ.get("GOOGLE_API_KEY", "")
+    """Get Google API key from environment or fallback."""
+    return os.environ.get("GOOGLE_API_KEY", _FALLBACK_GOOGLE_KEY)
 
 # System prompt for evaluation
 SYSTEM_PROMPT = (
