@@ -20,9 +20,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Expose the port Railway will use
-EXPOSE $PORT
+# Set the working directory to ui
+WORKDIR /app/ui
 
-# Run the Streamlit app
-CMD cd ui && streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+# Expose the port (Railway sets this dynamically)
+EXPOSE 8501
+
+# Run the Streamlit app using shell form
+CMD ["sh", "-c", "streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]
 
