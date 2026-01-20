@@ -45,7 +45,7 @@ with st.sidebar:
     """)
     
     st.markdown("---")
-    st.caption("© 2025 Resume Validity Research")
+    st.caption("© 2025 PEAS Lab")
 
 # Main content
 st.markdown("""
