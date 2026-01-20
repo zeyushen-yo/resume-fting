@@ -654,12 +654,12 @@ def run_stress_test(
         eval_reword = evaluate_pair(
             model_id,
             base_resume,
-                reworded_variant,
+            reworded_variant,
             job_description,
             expected_winner="either"
         )
         eval_reword["test_type"] = "reworded"
-            eval_reword["qualification"] = f"(phrasing variant {i+1})"
+        eval_reword["qualification"] = f"(phrasing variant {i+1})"
         eval_reword["model_name"] = model_name
         result.model_results.append(eval_reword)
     
@@ -704,14 +704,14 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
                 insights.append({
                     "type": "warning",
                     "icon": "⚠️",
-                "message": f"Undervalued skills: {len(none_noticed)} of your qualifications weren't noticed when removed. Consider emphasizing them more or they may not matter for this role."
+                    "message": f"Undervalued skills: {len(none_noticed)} of your qualifications weren't noticed when removed. Consider emphasizing them more or they may not matter for this role."
                 })
         
         overall_correct = sum(1 for r in removed_results if r["is_correct"])
         overall_total = len(removed_results)
-                insights.append({
-                    "type": "info",
-                    "icon": "📊",
+        insights.append({
+            "type": "info",
+            "icon": "📊",
             "message": f"Resume qualification impact: {overall_correct}/{overall_total} ({int(overall_correct/max(overall_total,1)*100)}%) of your qualifications are valued by AI systems."
         })
     

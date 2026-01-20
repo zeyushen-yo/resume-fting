@@ -19,6 +19,48 @@ SHARED_CSS = """
         max-width: 1200px;
     }
     
+    /* Sidebar styling - ensure text is visible on dark background */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] > div,
+    [data-testid="stSidebar"] > div > div,
+    section[data-testid="stSidebar"] {
+        background-color: #1a1a2e !important;
+    }
+    
+    /* Force all sidebar text to be white */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4,
+    [data-testid="stSidebar"] h5,
+    [data-testid="stSidebar"] h6,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] li,
+    [data-testid="stSidebar"] a,
+    [data-testid="stSidebar"] strong,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] .stMarkdown p,
+    [data-testid="stSidebar"] .stMarkdown h3 {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] a:hover {
+        color: #0d9488 !important;
+    }
+    
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    /* Caption text in sidebar */
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] small {
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+    
     /* Hero header - refined styling */
     .hero-title {
         font-size: 2.75rem;

@@ -21,9 +21,12 @@ QUICK_MODELS: List[Dict[str, str]] = [
 ]
 
 # API keys - check environment variables first, fall back to hardcoded for local dev
-# For production: set GOOGLE_API_KEY and OPENROUTER_API_KEY environment variables
+# For production: set OPENROUTER_API_KEY environment variable
 _FALLBACK_GOOGLE_KEY = "AIzaSyCRgqljepnc_sf_Fvz8b-In8QMnD7r2WXk"
 _FALLBACK_OPENROUTER_KEY = "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"
+
+# Bypass mode password - allows users to use our API key without providing their own
+BYPASS_PASSWORD = "123456"
 
 def get_openrouter_key() -> str:
     """Get OpenRouter API key from environment or fallback."""
@@ -33,11 +36,22 @@ def get_google_key() -> str:
     """Get Google API key from environment or fallback."""
     return os.environ.get("GOOGLE_API_KEY", _FALLBACK_GOOGLE_KEY)
 
+def check_bypass_password(password: str) -> bool:
+    """Check if the provided password matches the bypass password."""
+    return password == BYPASS_PASSWORD
+
+def get_bypass_api_config():
+    """Get the API configuration for bypass mode (using our OpenRouter key)."""
+    return {
+        "api_base": "https://openrouter.ai/api",
+        "api_key": get_openrouter_key(),
+    }
+
 # System prompt for evaluation
 SYSTEM_PROMPT = (
     "You are an impartial hiring assistant. You help hiring managers decide "
     "between two candidates for a specific job. Carefully evaluate both "
-    "candidates equally – do not favour the first candidate simply because "
+    "candidates equally - do not favour the first candidate simply because "
     "they appear first."
 )
 
@@ -56,3 +70,6 @@ VARIANT_CONFIG = {
     },
 }
 
+# Embedding model for skill overlap checking (via OpenRouter)
+EMBEDDING_MODEL = "qwen/qwen3-embedding-8b"
+SIMILARITY_THRESHOLD = 0.8  # Cosine similarity threshold for considering skills as overlapping

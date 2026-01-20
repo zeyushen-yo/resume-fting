@@ -212,35 +212,20 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<a name="privacy"></a>', unsafe_allow_html=True)
 st.markdown("## 🔒 Privacy & Data Handling")
 
-st.markdown("""
-<div class="privacy-notice" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem;">
-    <h4 style="color: #1a1a2e; margin-top: 0;">Your Data, Your Control</h4>
+with st.container():
+    st.markdown("""
+    #### Your Data, Your Control
     
-    <p style="color: #4a5568; line-height: 1.7;">
-        We understand that resumes contain sensitive personal information. Here's how we handle your data:
-    </p>
+    We understand that resumes contain sensitive personal information. Here's how we handle your data:
     
-    <ul style="color: #4a5568; line-height: 1.8;">
-        <li><strong>🚫 No Storage:</strong> Resumes are processed only to generate results and are 
-            <strong>not stored, saved, or retained</strong> after your session ends.</li>
-        <li><strong>🤖 Automated Processing:</strong> All analysis is fully automated — 
-            <strong>no humans review</strong> your resume or any LLM outputs.</li>
-        <li><strong>🔗 Third-Party APIs:</strong> When you connect to external LLM providers 
-            (OpenAI, Anthropic, OpenRouter, etc.), your data is sent to those services. 
-            Their data handling is governed by <strong>their privacy policies</strong>, not ours.</li>
-        <li><strong>🏠 Local Option:</strong> For maximum privacy, connect to a <strong>locally-hosted LLM</strong> 
-            (Ollama, vLLM) — your data never leaves your machine.</li>
-        <li><strong>✏️ Anonymization Recommended:</strong> We suggest removing or anonymizing 
-            particularly sensitive information (exact addresses, phone numbers) before testing, 
-            especially when using third-party APIs.</li>
-    </ul>
+    - **🚫 No Storage:** Resumes are processed only to generate results and are **not stored, saved, or retained** after your session ends.
+    - **🤖 Automated Processing:** All analysis is fully automated — **no humans review** your resume or any LLM outputs.
+    - **🔗 Third-Party APIs:** When you connect to external LLM providers (OpenAI, Anthropic, OpenRouter, etc.), your data is sent to those services. Their data handling is governed by **their privacy policies**, not ours.
+    - **🏠 Local Option:** For maximum privacy, connect to a **locally-hosted LLM** (Ollama, vLLM) — your data never leaves your machine.
+    - **✏️ Anonymization Recommended:** We suggest removing or anonymizing particularly sensitive information (exact addresses, phone numbers) before testing, especially when using third-party APIs.
     
-    <p style="color: #64748b; font-size: 0.9rem; margin-top: 1rem; margin-bottom: 0;">
-        <em>This tool is provided for research and educational purposes. 
-        We make no guarantees about AI evaluation accuracy.</em>
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    *This tool is provided for research and educational purposes. We make no guarantees about AI evaluation accuracy.*
+    """)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
