@@ -684,74 +684,175 @@ def run_benchmark(
 
 
 def render_header():
-    """Render the hero header."""
-    st.markdown('<h1 class="hero-title">🔬 LLM Provider Benchmark</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-subtitle">Benchmark your LLM\'s hiring decision quality with our validity framework. '
-        'Connect via OpenAI-compatible API.</p>',
-        unsafe_allow_html=True
-    )
+    """Render the hero header with explanation."""
+    st.markdown("""
+    <h1 style="font-size: 2.5rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.25rem;">
+        🔬 LLM Provider Benchmark
+    </h1>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <p style="font-size: 1.1rem; color: #4a5568; line-height: 1.6; margin-bottom: 1rem;">
+        Evaluate your LLM's hiring decision quality using our research framework. 
+        We measure <strong>criterion validity</strong> (does it pick the better candidate?) and 
+        <strong>discriminant validity</strong> (does it correctly abstain on equal pairs?).
+    </p>
+    """, unsafe_allow_html=True)
+    
+    # Reproduce our paper callout
+    st.markdown("""
+    <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #f0f9ff 100%); border-left: 4px solid #0d9488;">
+        <h4 style="color: #0d9488; margin-top: 0;">📄 Reproduce Our Paper Results</h4>
+        <p style="color: #4a5568; margin-bottom: 0; line-height: 1.6;">
+            The <strong>Quick Benchmark</strong> mode uses the same job descriptions and methodology from our research paper. 
+            Connect your model and run the benchmark to see how it compares to GPT-4, Claude, and other frontier models.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Privacy notice
+    with st.expander("🔒 Privacy & Data Handling", expanded=False):
+        st.markdown("""
+        **Your data stays secure:**
+        
+        - ✅ **No storage**: Resumes and job descriptions are NOT stored after your session
+        - ✅ **Automated**: All processing is fully automated — no humans review your data
+        - ✅ **Your API**: When you connect your own model, data goes directly to your server
+        - ✅ **Demo Mode**: Uses our API key for convenience — same privacy guarantees apply
+        - 💡 **Local option**: Connect to a locally-hosted LLM (Ollama, vLLM) for maximum privacy
+        """)
 
 
 def render_api_config():
-    """Render API configuration section."""
+    """Render API configuration section with demo mode option."""
     st.markdown("### 🔌 Connect Your LLM")
     
-    st.info("""
-    **How to connect your model:**
+    # Demo mode toggle
+    st.markdown("#### Access Mode")
+    col_demo1, col_demo2 = st.columns([1, 2])
     
-    Most inference servers expose an OpenAI-compatible API:
-    - **vLLM**: `http://localhost:8000` (default)
-    - **Text Generation Inference (TGI)**: `http://localhost:8080`
-    - **Ollama**: `http://localhost:11434`
-    - **LocalAI**: `http://localhost:8080`
-    - **OpenRouter**: `https://openrouter.ai/api` (with API key)
-    - **Together AI**: `https://api.together.xyz` (with API key)
+    with col_demo1:
+        use_demo = st.checkbox(
+            "🎯 Use Demo Mode",
+            value=False,
+            help="Demo mode uses our API credits via OpenRouter - no API key needed!"
+        )
     
-    Just provide your base URL and model name!
-    """)
+    demo_active = False
+    demo_password = ""
     
-    col1, col2 = st.columns(2)
+    if use_demo:
+        with col_demo2:
+            demo_password = st.text_input(
+                "Demo Password",
+                type="password",
+                help="Enter the demo password to activate",
+                placeholder="Enter password...",
+                key="demo_password_provider"
+            )
+            
+            from ui.config import check_bypass_password, get_bypass_api_config
+            
+            if demo_password:
+                if check_bypass_password(demo_password):
+                    st.success("✅ Demo mode activated! Using OpenRouter with preset models.")
+                    demo_active = True
+                else:
+                    st.error("❌ Invalid password")
     
-    with col1:
-        api_base = st.text_input(
-            "API Base URL",
-            value="http://localhost:8000",
-            help="The base URL of your OpenAI-compatible API server",
-            placeholder="http://localhost:8000"
+    if demo_active:
+        # In demo mode, use our OpenRouter config
+        config = get_bypass_api_config()
+        api_base = config["api_base"]
+        api_key = config["api_key"]
+        
+        st.markdown("""
+        <div class="card" style="background: #f0fdf4; border: 1px solid #86efac;">
+            <p style="color: #166534; margin: 0;">
+                <strong>Demo Mode Active</strong> — Using OpenRouter API. 
+                Select a model below to benchmark.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Model selection for demo mode
+        demo_models = [
+            ("GPT-4o Mini", "openai/gpt-4o-mini"),
+            ("Claude 3.5 Haiku", "anthropic/claude-3-5-haiku-20241022"),
+            ("Gemini 2.0 Flash", "google/gemini-2.0-flash-001"),
+            ("Llama 3.1 8B", "meta-llama/llama-3.1-8b-instruct"),
+            ("DeepSeek V3", "deepseek/deepseek-chat-v3-0324"),
+        ]
+        
+        model_choice = st.selectbox(
+            "Select Model to Benchmark",
+            options=[name for name, _ in demo_models],
+            index=0
         )
         
-        model_name = st.text_input(
-            "Model Name",
-            value="",
-            help="The model name/ID to use (as expected by your server)",
-            placeholder="e.g., meta-llama/Llama-3.1-8B-Instruct"
-        )
-    
-    with col2:
-        api_key = st.text_input(
-            "API Key (optional)",
-            value="",
-            type="password",
-            help="API key if required by your server",
-            placeholder="sk-..."
-        )
+        model_name = next((id for name, id in demo_models if name == model_choice), demo_models[0][1])
         
-        # Test connection button
-        if st.button("🔗 Test Connection"):
-            if not api_base or not model_name:
-                st.error("Please provide API base URL and model name.")
-            else:
-                try:
-                    with st.spinner("Testing connection..."):
-                        response = call_custom_api(
-                            api_base, api_key, model_name,
-                            [{"role": "user", "content": "Say 'Connection successful!' in exactly those words."}],
-                            max_tokens=50
-                        )
-                    st.success(f"✅ Connection successful! Response: {response[:100]}...")
-                except Exception as e:
-                    st.error(f"❌ Connection failed: {e}")
+    else:
+        # Custom API mode
+        st.markdown("""
+        <p style="color: #4a5568; font-size: 0.95rem;">
+            Connect your own model via OpenAI-compatible API:
+        </p>
+        """, unsafe_allow_html=True)
+        
+        with st.expander("📖 Supported Endpoints", expanded=False):
+            st.markdown("""
+            | Provider | Base URL | Needs API Key |
+            |----------|----------|---------------|
+            | **vLLM** | `http://localhost:8000` | No |
+            | **TGI** | `http://localhost:8080` | No |
+            | **Ollama** | `http://localhost:11434` | No |
+            | **OpenRouter** | `https://openrouter.ai/api` | Yes |
+            | **Together AI** | `https://api.together.xyz` | Yes |
+            | **Anyscale** | `https://api.endpoints.anyscale.com` | Yes |
+            """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            api_base = st.text_input(
+                "API Base URL",
+                value="http://localhost:8000",
+                help="The base URL of your OpenAI-compatible API server",
+                placeholder="http://localhost:8000"
+            )
+            
+            model_name = st.text_input(
+                "Model Name",
+                value="",
+                help="The model name/ID to use (as expected by your server)",
+                placeholder="e.g., meta-llama/Llama-3.1-8B-Instruct"
+            )
+        
+        with col2:
+            api_key = st.text_input(
+                "API Key (optional)",
+                value="",
+                type="password",
+                help="API key if required by your server",
+                placeholder="sk-..."
+            )
+            
+            # Test connection button
+            if st.button("🔗 Test Connection"):
+                if not api_base or not model_name:
+                    st.error("Please provide API base URL and model name.")
+                else:
+                    try:
+                        with st.spinner("Testing connection..."):
+                            response = call_custom_api(
+                                api_base, api_key, model_name,
+                                [{"role": "user", "content": "Say 'Connection successful!' in exactly those words."}],
+                                max_tokens=50
+                            )
+                        st.success(f"✅ Connection successful! Response: {response[:100]}...")
+                    except Exception as e:
+                        st.error(f"❌ Connection failed: {e}")
     
     return api_base, api_key, model_name
 

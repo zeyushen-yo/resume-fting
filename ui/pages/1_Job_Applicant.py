@@ -11,7 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from ui.styles import inject_styles
 from ui.utils import extract_text_from_file
-from ui.config import EVALUATION_MODELS, QUICK_MODELS, get_openrouter_key
+from ui.config import (
+    EVALUATION_MODELS, QUICK_MODELS, get_openrouter_key,
+    check_bypass_password, get_bypass_api_config
+)
 from ui.stress_test import run_stress_test, StressTestResult
 
 # Page config
@@ -26,22 +29,77 @@ inject_styles()
 
 
 def render_header():
-    """Render the hero header."""
-    st.markdown('<h1 class="hero-title">👤 Resume Stress Test</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-subtitle">Discover how AI hiring systems evaluate your resume — '
-        'and what actually matters to them.</p>',
-        unsafe_allow_html=True
-    )
+    """Render the hero header with explanation."""
+    st.markdown("""
+    <h1 style="font-size: 2.5rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.25rem;">
+        👤 Resume Stress Test
+    </h1>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <p style="font-size: 1.1rem; color: #4a5568; line-height: 1.6; margin-bottom: 1rem;">
+        Understand how AI hiring systems evaluate your resume. We test what happens when 
+        qualifications are added or removed to reveal which skills AI actually values.
+    </p>
+    """, unsafe_allow_html=True)
+    
+    # Privacy notice
+    with st.expander("🔒 Privacy & Data Handling", expanded=False):
+        st.markdown("""
+        **Your privacy matters to us:**
+        
+        - ✅ **No storage**: Your resume is processed only to generate results and is NOT stored after your session
+        - ✅ **Automated**: All processing is fully automated — no humans review your data
+        - ✅ **Third-party APIs**: When testing against AI models, your resume is sent to those providers 
+          (OpenAI, Anthropic, Google, etc.). Their data handling follows their policies.
+        - 💡 **Recommendation**: Consider anonymizing sensitive info (exact addresses, phone numbers) before testing
+        
+        For maximum privacy, you can [benchmark with a locally-hosted LLM](/LLM_Provider).
+        """)
 
 
-def check_api_keys():
+def render_demo_mode():
+    """Render demo mode toggle for users without API key."""
+    st.markdown("### 🔑 Access Mode")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        use_demo = st.checkbox(
+            "Use Demo Mode (no API key needed)",
+            value=False,
+            help="Demo mode uses our API key for quick testing. For heavy usage, please provide your own key."
+        )
+    
+    demo_password = ""
+    if use_demo:
+        with col2:
+            demo_password = st.text_input(
+                "Demo Password",
+                type="password",
+                help="Enter the demo password to use our API credits",
+                placeholder="Enter password..."
+            )
+            
+            if demo_password:
+                if check_bypass_password(demo_password):
+                    st.success("✅ Demo mode activated!")
+                else:
+                    st.error("❌ Invalid password")
+                    demo_password = ""
+    
+    return use_demo, demo_password
+
+
+def check_api_keys(use_demo: bool, demo_password: str):
     """Check if required API keys are available."""
+    if use_demo and check_bypass_password(demo_password):
+        return True
+    
     openrouter_key = get_openrouter_key()
     
     if not openrouter_key:
-        st.error("⚠️ Missing OPENROUTER_API_KEY")
-        st.info("Set this environment variable or update ui/config.py before running.")
+        st.error("⚠️ Missing API access. Either enable Demo Mode or set OPENROUTER_API_KEY.")
         return False
     return True
 
@@ -109,12 +167,19 @@ def render_model_selection():
     """Render model selection options."""
     st.markdown("### ⚙️ Model Selection")
     
+    st.markdown("""
+    <p style="color: #4a5568; font-size: 0.95rem;">
+        Choose which AI models to test your resume against. Different models may value 
+        different qualifications.
+    </p>
+    """, unsafe_allow_html=True)
+    
     # Preset options
     preset = st.radio(
         "Choose evaluation preset",
         ["Quick (3 models)", "Full (5 models)", "Custom"],
         horizontal=True,
-        help="Quick mode uses fewer models for faster results. Full mode provides more comprehensive coverage. Custom lets you pick specific models."
+        help="Quick mode uses fewer models for faster results. Full mode provides more comprehensive coverage."
     )
     
     if preset == "Quick (3 models)":
@@ -165,7 +230,7 @@ def render_results(result: StressTestResult):
     
     num_resume_quals = len(result.qualifications.get("resume", []))
     num_jd_quals = len(result.qualifications.get("jd", []))
-    num_models = len(reworded_results)  # One reworded test per model
+    num_models = len(set(r.get("model_name", "") for r in result.model_results))
     
     removed_correct = sum(1 for r in removed_results if r["is_correct"])
     added_correct = sum(1 for r in added_results if r["is_correct"])
@@ -187,7 +252,7 @@ def render_results(result: StressTestResult):
         st.markdown(f"""
         <div class="stat-box">
             <div class="stat-number">{pct}%</div>
-            <div class="stat-label">Your Skills Matter</div>
+            <div class="stat-label">Your Skills Noticed</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -203,10 +268,11 @@ def render_results(result: StressTestResult):
     
     with col4:
         abstain_count = sum(1 for r in reworded_results if r["decision"] == "ABSTAIN")
+        total_reworded = len(reworded_results)
         st.markdown(f"""
         <div class="stat-box">
-            <div class="stat-number">{abstain_count}/{num_models}</div>
-            <div class="stat-label">Ignore Phrasing</div>
+            <div class="stat-number">{abstain_count}/{total_reworded}</div>
+            <div class="stat-label">Phrasing Neutral</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -220,7 +286,7 @@ def render_results(result: StressTestResult):
         st.markdown(f"""
         <div class="card {css_class}">
             <span style="font-size: 1.5rem;">{insight['icon']}</span>
-            <span style="margin-left: 0.5rem; font-size: 1rem;">{insight['message']}</span>
+            <span style="margin-left: 0.5rem; font-size: 1rem; color: #1a1a2e;">{insight['message']}</span>
         </div>
         """, unsafe_allow_html=True)
     
@@ -232,8 +298,10 @@ def render_results(result: StressTestResult):
     tab1, tab2, tab3 = st.tabs(["📄 Your Resume Skills", "📋 JD Requirements", "🔄 Phrasing Test"])
     
     with tab1:
-        st.markdown("**Test:** What happens when each of YOUR qualifications is removed?")
-        st.markdown("**Expected:** AI should prefer your original resume (first)")
+        st.markdown("""
+        **Test:** What happens when each of YOUR qualifications is removed?  
+        **Expected:** AI should prefer your original resume (with the qualification)
+        """)
         st.markdown("---")
         
         if not removed_results:
@@ -265,12 +333,20 @@ def render_results(result: StressTestResult):
                     for r in results:
                         icon = "✅" if r["is_correct"] else "❌"
                         decision = r["decision"] or "no answer"
-                        st.markdown(f"- {icon} **{r['model_name']}**: chose `{decision}`")
-                        st.text(r.get("raw_response", "No response")[:500] + "...")
+                        st.markdown(f"- {icon} **{r['model_name']}**: chose `{decision}` (expected: `first`)")
+                        
+                        # Show reasoning snippet
+                        raw_response = r.get("raw_response", "")
+                        if raw_response:
+                            # Extract first few sentences of reasoning
+                            snippet = raw_response[:400].replace('\n', ' ')
+                            st.caption(f"Reasoning: {snippet}...")
     
     with tab2:
-        st.markdown("**Test:** What happens when each JD requirement is added to your resume?")
-        st.markdown("**Expected:** AI should prefer the enhanced resume (second)")
+        st.markdown("""
+        **Test:** What happens when each JD requirement is added to your resume?  
+        **Expected:** AI should prefer the enhanced resume (with the added qualification)
+        """)
         st.markdown("---")
         
         if not added_results:
@@ -302,12 +378,19 @@ def render_results(result: StressTestResult):
                     for r in results:
                         icon = "✅" if r["is_correct"] else "❌"
                         decision = r["decision"] or "no answer"
-                        st.markdown(f"- {icon} **{r['model_name']}**: chose `{decision}`")
-                        st.text(r.get("raw_response", "No response")[:500] + "...")
+                        st.markdown(f"- {icon} **{r['model_name']}**: chose `{decision}` (expected: `second`)")
+                        
+                        # Show reasoning snippet
+                        raw_response = r.get("raw_response", "")
+                        if raw_response:
+                            snippet = raw_response[:400].replace('\n', ' ')
+                            st.caption(f"Reasoning: {snippet}...")
     
     with tab3:
-        st.markdown("**Test:** Same qualifications, just reworded")
-        st.markdown("**Expected:** AI should abstain or be split (no clear winner)")
+        st.markdown("""
+        **Test:** Same qualifications, just reworded  
+        **Expected:** AI should abstain or recognize equivalence
+        """)
         st.markdown("---")
         
         for r in reworded_results:
@@ -344,9 +427,14 @@ def render_results(result: StressTestResult):
         st.markdown("#### Original (Cleaned)")
         st.markdown(result.variants.get("original", ""))
         
-        st.markdown("---")
-        st.markdown("#### Reworded Variant")
-        st.markdown(result.variants.get("reworded", ""))
+        # Show reworded variants
+        reworded_list = result.variants.get("reworded_list", [])
+        if reworded_list:
+            st.markdown("---")
+            st.markdown("#### Reworded Variants")
+            for i, variant in enumerate(reworded_list):
+                with st.expander(f"Reworded Version {i+1}"):
+                    st.markdown(variant)
         
         # Show removed variants
         removed_list = result.variants.get("removed_list", [])
@@ -370,11 +458,18 @@ def render_results(result: StressTestResult):
 def main():
     render_header()
     
-    if not check_api_keys():
-        return
+    # Demo mode toggle
+    use_demo, demo_password = render_demo_mode()
+    
+    if not check_api_keys(use_demo, demo_password):
+        st.stop()
+    
+    st.markdown("---")
     
     # Input section
     resume, job_desc = render_input_section()
+    
+    st.markdown("---")
     
     # Model selection
     selected_models = render_model_selection()
@@ -403,7 +498,7 @@ def main():
         status_text = st.empty()
         
         def progress_callback(step: int, total: int, message: str):
-            progress_bar.progress(step / total)
+            progress_bar.progress(min(step / total, 1.0))
             status_text.text(message)
         
         try:
@@ -434,4 +529,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -13,12 +13,99 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from .config import SYSTEM_PROMPT, get_openrouter_key, get_google_key
+from .config import SYSTEM_PROMPT, get_openrouter_key, get_google_key, EMBEDDING_MODEL, SIMILARITY_THRESHOLD
 
 
 # Retry settings
 MAX_RETRIES = 3
 RETRY_DELAY_BASE = 2  # seconds, will be multiplied by 2^attempt
+
+
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    """Get embeddings for a list of texts using OpenRouter's embedding API."""
+    api_key = get_openrouter_key()
+    if not api_key:
+        print("Warning: No OpenRouter API key for embeddings, skipping overlap check")
+        return []
+    
+    url = "https://openrouter.ai/api/v1/embeddings"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": EMBEDDING_MODEL,
+        "input": texts,
+    }
+    
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        if resp.status_code != 200:
+            print(f"Embedding API error: {resp.status_code} - {resp.text[:200]}")
+            return []
+        
+        data = resp.json()
+        embeddings = [item["embedding"] for item in data.get("data", [])]
+        return embeddings
+    except Exception as e:
+        print(f"Failed to get embeddings: {e}")
+        return []
+
+
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    if not a or not b:
+        return 0.0
+    
+    dot_product = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    
+    return dot_product / (norm_a * norm_b)
+
+
+def check_skill_overlap(skill_to_add: str, existing_skills: List[str], threshold: float = SIMILARITY_THRESHOLD) -> Dict[str, Any]:
+    """
+    Check if a skill to add overlaps with existing resume skills using embeddings.
+    
+    Returns:
+        Dict with 'has_overlap', 'similar_skill' (if found), and 'similarity_score'
+    """
+    if not existing_skills:
+        return {"has_overlap": False, "similar_skill": None, "similarity_score": 0.0}
+    
+    # Get embeddings for all skills at once
+    all_texts = [skill_to_add] + existing_skills
+    embeddings = get_embeddings(all_texts)
+    
+    if not embeddings or len(embeddings) < 2:
+        # Fallback to simple string matching if embeddings fail
+        skill_lower = skill_to_add.lower()
+        for existing in existing_skills:
+            if skill_lower in existing.lower() or existing.lower() in skill_lower:
+                return {"has_overlap": True, "similar_skill": existing, "similarity_score": 1.0}
+        return {"has_overlap": False, "similar_skill": None, "similarity_score": 0.0}
+    
+    # Compare skill_to_add (index 0) with each existing skill
+    skill_embedding = embeddings[0]
+    max_similarity = 0.0
+    most_similar_skill = None
+    
+    for i, existing_skill in enumerate(existing_skills):
+        if i + 1 < len(embeddings):  # +1 because index 0 is skill_to_add
+            similarity = cosine_similarity(skill_embedding, embeddings[i + 1])
+            if similarity > max_similarity:
+                max_similarity = similarity
+                most_similar_skill = existing_skill
+    
+    return {
+        "has_overlap": max_similarity >= threshold,
+        "similar_skill": most_similar_skill if max_similarity >= threshold else None,
+        "similarity_score": max_similarity
+    }
 
 
 @dataclass
@@ -257,32 +344,53 @@ Preserve all original content. Do NOT add or remove qualifications.
 
 def generate_underqualified_variant(base_resume: str, qualification_to_remove: str) -> str:
     """Generate a resume variant with one qualification removed."""
-    system = "You write realistic professional resumes in Markdown. Use concise, credible content."
+    system = """You are an expert resume writer. Your task is to modify resumes by removing specific qualifications.
+When removing a qualification, you must:
+1. Remove ALL mentions of that qualification from the entire resume
+2. Remove related bullet points, skills, or experience that demonstrate that qualification
+3. Keep the resume otherwise identical in structure and content
+4. The result should be a candidate who clearly LACKS this qualification"""
     
     user = (
-        f"Given this resume, create a version that REMOVES this qualification: '{qualification_to_remove}'.\n"
-        "Do not add new qualifications. Keep the same structure and style.\n"
-        "Keep 'Name: {{CANDIDATE_NAME}}' and {{COMPANY_NAME}}/{{SCHOOL_NAME}} placeholders.\n"
-        "No contact info.\n\n"
-        f"Resume:\n{base_resume}"
+        f"TASK: Create a version of this resume that COMPLETELY REMOVES this qualification:\n"
+        f"'{qualification_to_remove}'\n\n"
+        "RULES:\n"
+        "- Remove ALL references to this qualification, skill, or experience\n"
+        "- Remove any bullet points that demonstrate this qualification\n"
+        "- The modified resume should represent someone who DOES NOT have this qualification\n"
+        "- Keep all OTHER qualifications and content unchanged\n"
+        "- Keep 'Name: {{CANDIDATE_NAME}}' and {{COMPANY_NAME}}/{{SCHOOL_NAME}} placeholders\n"
+        "- No contact info\n\n"
+        f"ORIGINAL RESUME:\n{base_resume}"
     )
     
-    return call_gemini(system, user, temperature=0.3)
+    return call_gemini(system, user, temperature=0.2)
 
 
 def generate_preferred_variant(base_resume: str, qualification_to_add: str) -> str:
     """Generate a resume variant with one bonus qualification added."""
-    system = "You write realistic professional resumes in Markdown. Use concise, credible content."
+    system = """You are an expert resume writer. Your task is to modify resumes by adding specific qualifications.
+When adding a qualification, you must:
+1. Add clear evidence of this qualification to the resume
+2. Include it in relevant sections (Skills, Experience, Summary)
+3. Make it prominent and clearly visible
+4. Keep all other content identical"""
     
     user = (
-        f"Given this resume, create a version that ADDS this preferred qualification: '{qualification_to_add}'.\n"
-        "Do not add any other new qualifications.\n"
-        "Keep 'Name: {{CANDIDATE_NAME}}' and {{COMPANY_NAME}}/{{SCHOOL_NAME}} placeholders.\n"
-        "No contact info.\n\n"
-        f"Resume:\n{base_resume}"
+        f"TASK: Create a version of this resume that ADDS this qualification:\n"
+        f"'{qualification_to_add}'\n\n"
+        "RULES:\n"
+        "- Add this qualification to the Skills section\n"
+        "- Add a bullet point in Experience showing you've used this skill\n"
+        "- Optionally mention it in the Summary\n"
+        "- The addition should be CLEAR and PROMINENT\n"
+        "- Keep all other qualifications and content unchanged\n"
+        "- Keep 'Name: {{CANDIDATE_NAME}}' and {{COMPANY_NAME}}/{{SCHOOL_NAME}} placeholders\n"
+        "- No contact info\n\n"
+        f"ORIGINAL RESUME:\n{base_resume}"
     )
     
-    return call_gemini(system, user, temperature=0.35)
+    return call_gemini(system, user, temperature=0.25)
 
 
 def generate_reworded_variant(base_resume: str) -> str:
@@ -467,12 +575,33 @@ def run_stress_test(
     result.variants["removed_list"] = removed_variants
     
     # Step 5: Generate "added" variants - add each qualification FROM JD
-    added_variants = []  # List of (qual_text, variant_resume)
+    # First, check for skill overlap to avoid adding skills that already exist
+    added_variants = []  # List of (qual_text, variant_resume, overlap_info)
+    skipped_quals = []  # Qualifications that were skipped due to overlap
+    
+    resume_skill_texts = [q.text for q in resume_quals]
+    
     for i, qual in enumerate(jd_quals):
-        update_progress(f"Testing addition {i+1}/{num_jd_quals}: '{qual.text[:40]}...'")
+        update_progress(f"Checking addition {i+1}/{num_jd_quals}: '{qual.text[:40]}...'")
+        
+        # Check if this JD qualification overlaps with existing resume skills
+        overlap_info = check_skill_overlap(qual.text, resume_skill_texts)
+        
+        if overlap_info["has_overlap"]:
+            # Skip this qualification as it already exists in the resume
+            skipped_quals.append({
+                "qual": qual.text,
+                "similar_to": overlap_info["similar_skill"],
+                "similarity": overlap_info["similarity_score"]
+            })
+            print(f"Skipping '{qual.text[:40]}...' - overlaps with '{overlap_info['similar_skill'][:40]}...' (similarity: {overlap_info['similarity_score']:.2f})")
+            continue
+        
         variant = generate_preferred_variant(base_resume, qual.text)
         added_variants.append((qual.text, variant))
+    
     result.variants["added_list"] = added_variants
+    result.variants["skipped_overlaps"] = skipped_quals  # Store for UI display
     
     # Step 6: Generate 3 reworded variants (for equal pairs / discriminant validity)
     NUM_REWORDED_VARIANTS = 3
@@ -492,10 +621,10 @@ def run_stress_test(
         for qual_text, variant in removed_variants:
             update_progress(f"{model_name}: Testing without '{qual_text[:30]}...'")
             eval_result = evaluate_pair(
-                model_id,
+            model_id,
                 base_resume,  # Original with the qualification
                 variant,      # Variant without the qualification
-                job_description,
+            job_description,
                 expected_winner="first"  # Original should be preferred
             )
             eval_result["test_type"] = "removed"
@@ -508,10 +637,10 @@ def run_stress_test(
         for qual_text, variant in added_variants:
             update_progress(f"{model_name}: Testing with '{qual_text[:30]}...'")
             eval_result = evaluate_pair(
-                model_id,
+            model_id,
                 base_resume,  # Original without the JD qualification
                 variant,      # Variant with the JD qualification added
-                job_description,
+            job_description,
                 expected_winner="second"  # Enhanced should be preferred
             )
             eval_result["test_type"] = "added"
@@ -522,17 +651,17 @@ def run_stress_test(
         # Test all reworded variants (should be roughly equal - for discriminant validity)
         for i, reworded_variant in enumerate(reworded_variants):
             update_progress(f"{model_name}: Testing reworded version {i+1}/{NUM_REWORDED_VARIANTS}...")
-            eval_reword = evaluate_pair(
-                model_id,
-                base_resume,
+        eval_reword = evaluate_pair(
+            model_id,
+            base_resume,
                 reworded_variant,
-                job_description,
-                expected_winner="either"
-            )
-            eval_reword["test_type"] = "reworded"
+            job_description,
+            expected_winner="either"
+        )
+        eval_reword["test_type"] = "reworded"
             eval_reword["qualification"] = f"(phrasing variant {i+1})"
-            eval_reword["model_name"] = model_name
-            result.model_results.append(eval_reword)
+        eval_reword["model_name"] = model_name
+        result.model_results.append(eval_reword)
     
     # Generate insights
     result.qualification_insights = generate_insights(result)
@@ -565,24 +694,24 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
         none_noticed = [q for q, s in qual_stats.items() if s["correct"] == 0]
         
         if all_noticed:
-            insights.append({
-                "type": "success",
-                "icon": "✅",
+                insights.append({
+                    "type": "success",
+                    "icon": "✅",
                 "message": f"Essential resume skills: {len(all_noticed)} of your qualifications were noticed by ALL models when removed. These are your strongest assets!"
-            })
+                })
         
         if none_noticed:
-            insights.append({
-                "type": "warning",
-                "icon": "⚠️",
+                insights.append({
+                    "type": "warning",
+                    "icon": "⚠️",
                 "message": f"Undervalued skills: {len(none_noticed)} of your qualifications weren't noticed when removed. Consider emphasizing them more or they may not matter for this role."
-            })
+                })
         
         overall_correct = sum(1 for r in removed_results if r["is_correct"])
         overall_total = len(removed_results)
-        insights.append({
-            "type": "info",
-            "icon": "📊",
+                insights.append({
+                    "type": "info",
+                    "icon": "📊",
             "message": f"Resume qualification impact: {overall_correct}/{overall_total} ({int(overall_correct/max(overall_total,1)*100)}%) of your qualifications are valued by AI systems."
         })
     
@@ -602,15 +731,15 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
         none_valued = [q for q, s in qual_stats.items() if s["correct"] == 0]
         
         if all_valued:
-            insights.append({
-                "type": "success",
+                insights.append({
+                    "type": "success",
                 "icon": "🌟",
                 "message": f"High-impact skills to add: {len(all_valued)} JD requirements would be valued by ALL models if added to your resume!"
             })
         
         if none_valued:
-            insights.append({
-                "type": "info",
+                insights.append({
+                    "type": "info",
                 "icon": "💡",
                 "message": f"Lower priority: {len(none_valued)} 'preferred' qualifications weren't valued by any models. May not be worth the effort."
             })
@@ -622,14 +751,14 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
         total = len(decisions)
         
         if abstain_count == total:
-            insights.append({
-                "type": "success",
+                insights.append({
+                    "type": "success",
                 "icon": "⚖️",
                 "message": "Phrasing-neutral: All models correctly ignored cosmetic differences. Your resume's substance matters more than exact wording."
-            })
+                })
         elif abstain_count == 0:
-            insights.append({
-                "type": "warning",
+                insights.append({
+                    "type": "warning",
                 "icon": "🎲",
                 "message": "Phrasing-sensitive: All models were influenced by wording changes. Consider A/B testing different phrasings."
             })
@@ -638,7 +767,7 @@ def generate_insights(result: StressTestResult) -> List[Dict[str, Any]]:
                 "type": "info",
                 "icon": "📝",
                 "message": f"Mixed phrasing sensitivity: {abstain_count}/{total} models ignored phrasing, {total-abstain_count} were influenced by it."
-            })
+                })
     
     return insights
 
