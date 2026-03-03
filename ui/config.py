@@ -51,7 +51,7 @@ def get_bypass_api_config():
 SYSTEM_PROMPT = (
     "You are an impartial hiring assistant. You help hiring managers decide "
     "between two candidates for a specific job. Carefully evaluate both "
-    "candidates equally - do not favour the first candidate simply because "
+    "candidates equally – do not favour the first candidate simply because "
     "they appear first."
 )
 
