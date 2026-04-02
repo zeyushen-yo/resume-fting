@@ -20,11 +20,6 @@ QUICK_MODELS: List[Dict[str, str]] = [
     {"id": "meta-llama/llama-3.1-8b-instruct", "name": "Llama 3.1 8B", "provider": "Meta"},
 ]
 
-# API keys - check environment variables first, fall back to hardcoded for local dev
-# For production: set OPENROUTER_API_KEY environment variable
-_FALLBACK_GOOGLE_KEY = "AIzaSyCRgqljepnc_sf_Fvz8b-In8QMnD7r2WXk"
-_FALLBACK_OPENROUTER_KEY = "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"
-
 # Bypass mode password - allows users to use our API key without providing their own
 BYPASS_PASSWORD = "123456"
 
