@@ -1,0 +1,8 @@
+# New Website UI Draft 
+1. Create a new folder called ui_draft that copies ui (i want to create a second version) -- the streamlit app should pull from ui_draft, but maintain ui as backup folder
+2. Implement three main pages:
+    - Landing: the landing page should provide lightweight information about our study (just use placeholder text for now), and provide two buttons: generate dataset and test job description
+    - Generate dataset: allows user to select from a dropdown menu with a list of jobs (for now, just do software engineer, nurse practitioner, and wind turbine technician for now), then upload selection they can download a .json of evaluation pairs (just use empty .json now for each -- but create a folder where the future .json for job is stored). for each job it should also show a graph/table (again can use ui/resources/placeholder.png or .csv to populate) with our results for that job
+    - Test job description: allows the user to upload a job description, which will then use the LLM functionality (as already used when a user uploads a resume plus job description) to (a) generate base resume satistfting all key qualifications, (b) test systematic/random perturbations of job-relevant qualifications in resume pari construction and (c) test demographic/rewording perturbations of the same resume (this page is most similar to the "job applicant" view of the original UI)
+
+The pages should be pretty simple, without much text for now -- just focusing on the main functionality. Do not use any emojis. Ask follow up questions if needed. 

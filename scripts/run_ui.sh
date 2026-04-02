@@ -23,6 +23,6 @@ if [ -z "$OPENROUTER_API_KEY" ]; then
     echo "Warning: OPENROUTER_API_KEY not set. Model evaluation will fail."
 fi
 
-# Run Streamlit app
-streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0
+# Run Streamlit app (using ui_draft)
+streamlit run ui_draft/app.py --server.port 8501 --server.address 0.0.0.0
 

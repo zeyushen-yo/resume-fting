@@ -22,6 +22,3 @@ Notes
 - Names for demographics are sourced from `/home/zs7353/resume-fting/data/names.json`.
 - Resume content includes a placeholder `{{CANDIDATE_NAME}}` near the top for name injection.
 - Evaluation supports abstention: the model may answer that two resumes are equally qualified.
-
-
-# resume_validity
