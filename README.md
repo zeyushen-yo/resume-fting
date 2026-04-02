@@ -1,8 +1,7 @@
 # Measuring Validity in LLM-based Resume Screening
 
-[Paper](https://arxiv.org/abs/2602.18550) | [arXiv](https://arxiv.org/abs/2602.18550)
+[Paper](https://arxiv.org/abs/2602.18550)
 
-> **Castleman, Shen, Metevier, Springer, Korolova (2026).**  
 > We introduce a pipeline for constructing controlled resume pairs from real job postings and measuring whether LLM-based resume screeners make *valid* hiring decisions — i.e., do they prefer objectively more qualified candidates, and do they behave consistently across equivalent resumes?
 
 ---
