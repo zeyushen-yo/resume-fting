@@ -1,2 +1,0 @@
-# Resume Stress Test UI
-
