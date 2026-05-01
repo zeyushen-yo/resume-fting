@@ -44,8 +44,6 @@ with st.sidebar:
     - [📧 Contact Us](mailto:)
     """)
     
-    st.markdown("---")
-    st.caption("© 2025 PEAS Lab")
 
 # Main content
 st.markdown("""
@@ -64,7 +62,7 @@ st.markdown("""
 # Brief motivation section
 st.markdown("""
 <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #f0f9ff 100%); border-left: 4px solid #0d9488;">
-    <h3 style="color: #0d9488; margin-top: 0;">🎯 Why This Matters</h3>
+    <h3 style="color: #0d9488; margin-top: 0;">Why This Matters</h3>
     <p style="color: #4a5568; margin-bottom: 0; line-height: 1.7;">
         AI-powered resume screening is increasingly used in hiring, affecting millions of job seekers. 
         But how do we know these systems are actually identifying the best candidates? 
@@ -85,7 +83,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("""
     <div class="feature-card">
-        <div class="feature-icon">👤</div>
+        <div class="feature-icon"></div>
         <div class="feature-title">For Job Applicants</div>
         <div class="feature-text">
             <p><strong>Understand how AI sees your resume.</strong></p>
@@ -102,12 +100,12 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    st.page_link("pages/1_Job_Applicant.py", label="🚀 Test My Resume", use_container_width=True)
+    st.page_link("pages/1_Job_Applicant.py", label="Test My Resume", use_container_width=True)
 
 with col2:
     st.markdown("""
     <div class="feature-card">
-        <div class="feature-icon">🔬</div>
+        <div class="feature-icon"></div>
         <div class="feature-title">For LLM Providers & Researchers</div>
         <div class="feature-text">
             <p><strong>Benchmark your model's hiring decision quality.</strong></p>
@@ -124,7 +122,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    st.page_link("pages/2_LLM_Provider.py", label="📊 Benchmark My LLM", use_container_width=True)
+    st.page_link("pages/2_LLM_Provider.py", label="Benchmark My LLM", use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -134,21 +132,21 @@ st.markdown("## How It Works")
 st.markdown("""
 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 1rem;">
     <div class="card">
-        <h4 style="color: #0d9488;">1️⃣ Extract Qualifications</h4>
+        <h4 style="color: #0d9488;">1. Extract Qualifications</h4>
         <p style="color: #4a5568;">
             We analyze job descriptions to identify <strong>required</strong> qualifications 
             (must-haves) and <strong>preferred</strong> qualifications (nice-to-haves).
         </p>
     </div>
     <div class="card">
-        <h4 style="color: #0d9488;">2️⃣ Generate Test Pairs</h4>
+        <h4 style="color: #0d9488;">2. Generate Test Pairs</h4>
         <p style="color: #4a5568;">
             We create resume variants that differ by exactly one qualification, 
             creating pairs where one candidate is objectively better.
         </p>
     </div>
     <div class="card">
-        <h4 style="color: #0d9488;">3️⃣ Evaluate & Measure</h4>
+        <h4 style="color: #0d9488;">3. Evaluate & Measure</h4>
         <p style="color: #4a5568;">
             We test if AI systems correctly identify the better candidate and 
             calculate validity metrics based on their decisions.
@@ -161,7 +159,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 # Key findings teaser
 st.markdown('<a name="results"></a>', unsafe_allow_html=True)
-st.markdown("## 📊 Key Findings from Our Research")
+st.markdown("## Key Findings from Our Research")
 
 st.markdown("""
 <div class="paper-citation">
@@ -175,7 +173,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("""
     <div class="card">
-        <h4 style="color: #1a1a2e;">🔍 What We Found</h4>
+        <h4 style="color: #1a1a2e;">What We Found</h4>
         <ul style="color: #4a5568; line-height: 1.8;">
             <li><strong>High Criterion Validity:</strong> Most LLMs correctly prefer candidates 
                 with more qualifications (70-90% accuracy on strict pairs)</li>
@@ -218,11 +216,11 @@ with st.container():
     
     We understand that resumes contain sensitive personal information. Here's how we handle your data:
     
-    - **🚫 No Storage:** Resumes are processed only to generate results and are **not stored, saved, or retained** after your session ends.
-    - **🤖 Automated Processing:** All analysis is fully automated — **no humans review** your resume or any LLM outputs.
-    - **🔗 Third-Party APIs:** When you connect to external LLM providers (OpenAI, Anthropic, OpenRouter, etc.), your data is sent to those services. Their data handling is governed by **their privacy policies**, not ours.
-    - **🏠 Local Option:** For maximum privacy, connect to a **locally-hosted LLM** (Ollama, vLLM) — your data never leaves your machine.
-    - **✏️ Anonymization Recommended:** We suggest removing or anonymizing particularly sensitive information (exact addresses, phone numbers) before testing, especially when using third-party APIs.
+    - **No Storage:** Resumes are processed only to generate results and are **not stored, saved, or retained** after your session ends.
+    - **Automated Processing:** All analysis is fully automated — **no humans review** your resume or any LLM outputs.
+    - **Third-Party APIs:** When you connect to external LLM providers (OpenAI, Anthropic, OpenRouter, etc.), your data is sent to those services. Their data handling is governed by **their privacy policies**, not ours.
+    - **Local Option:** For maximum privacy, connect to a **locally-hosted LLM** (Ollama, vLLM) — your data never leaves your machine.
+    - **Anonymization Recommended:** We suggest removing or anonymizing particularly sensitive information (exact addresses, phone numbers) before testing, especially when using third-party APIs.
     
     *This tool is provided for research and educational purposes. We make no guarantees about AI evaluation accuracy.*
     """)
@@ -305,10 +303,8 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #64748b; font-size: 0.9rem;">
     <p>
-        Built with ❤️ for transparent AI hiring • 
-        <a href="#privacy">Privacy Policy</a> • 
-        <a href="#">Terms of Use</a> • 
-        <a href="https://github.com/">GitHub</a>
+        <a href="#privacy">Privacy Information</a> • 
+        <a href="https://github.com/zeyushen-yo/resume-fting">GitHub</a>
     </p>
     <p style="font-size: 0.85rem;">
         This is a research tool. Results should be interpreted as exploratory findings, not definitive assessments.
