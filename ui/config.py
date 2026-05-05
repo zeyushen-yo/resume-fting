@@ -24,12 +24,12 @@ QUICK_MODELS: List[Dict[str, str]] = [
 BYPASS_PASSWORD = "123456"
 
 def get_openrouter_key() -> str:
-    """Get OpenRouter API key from environment or fallback."""
-    return os.environ.get("OPENROUTER_API_KEY", _FALLBACK_OPENROUTER_KEY)
+    """Get OpenRouter API key from environment."""
+    return os.environ.get("OPENROUTER_API_KEY", "")
 
 def get_google_key() -> str:
-    """Get Google API key from environment or fallback."""
-    return os.environ.get("GOOGLE_API_KEY", _FALLBACK_GOOGLE_KEY)
+    """Get Google API key from environment."""
+    return os.environ.get("GOOGLE_API_KEY", "")
 
 def check_bypass_password(password: str) -> bool:
     """Check if the provided password matches the bypass password."""

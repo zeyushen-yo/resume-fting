@@ -40,7 +40,7 @@ fi
 # Total: 60 combos -> 60 parallel sessions
 
 declare -A RUNS
-RUNS["finance"]="real_world/reddit_finance_resumes.jsonl|non_cs_jobs/financial_analyst.jsonl|30"
+RUNS["finance"]="real_world/reddit_finance_resumes.jsonl|top_jobs/financial_analyst/passing_financial_analyst.jsonl|30"
 RUNS["swe"]="real_world/reddit_swe_resumes.jsonl|data/harvest_pool_t25/software_engineer/passing_software_engineer.jsonl|30"
 
 total_sessions=0

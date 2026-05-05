@@ -31,16 +31,13 @@ env/
 .vscode/
 *.swp
 *.swo
-*~
+*~       
 .DS_Store
 
 # Large data files and results
 data/
 evaluations/
 logs/
-real_world/
-non_cs_jobs/
-Resume.csv
 
 # Cache
 .cache/
@@ -50,9 +47,12 @@ analysis/cache/
 # Aggregated figures and metrics (can be regenerated)
 analysis/figures_*/
 analysis/aggregates_*/
-analysis/metrics_*/
+analysis/metrics_*/ 
 analysis/tables/
 analysis/*.csv
+
+# Old/archived files
+old/
 
 # Temporary files
 *.log

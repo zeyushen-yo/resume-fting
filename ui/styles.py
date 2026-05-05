@@ -27,7 +27,7 @@ SHARED_CSS = """
         background-color: #1a1a2e !important;
     }
     
-    /* Force all sidebar text to be white */
+    /* Force all sidebar text to be white, larger font */
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
@@ -45,6 +45,28 @@ SHARED_CSS = """
     [data-testid="stSidebar"] .stMarkdown p,
     [data-testid="stSidebar"] .stMarkdown h3 {
         color: #ffffff !important;
+        font-size: 1.05rem !important;
+    }
+
+    /* Sidebar nav page links — larger and clearly readable */
+    [data-testid="stSidebarNavLink"] span,
+    [data-testid="stSidebarNavLink"] p,
+    [data-testid="stSidebarNav"] a span,
+    [data-testid="stSidebarNav"] span {
+        font-size: 1.05rem !important;
+        font-weight: 500 !important;
+        color: #ffffff !important;
+    }
+
+    [data-testid="stSidebarNavLink"][aria-current="page"] span {
+        color: #5eead4 !important;
+        font-weight: 600 !important;
+    }
+
+    /* Sidebar section headers */
+    [data-testid="stSidebar"] h3 {
+        font-size: 1.15rem !important;
+        font-weight: 600 !important;
     }
     
     [data-testid="stSidebar"] a:hover {
@@ -116,6 +138,7 @@ SHARED_CSS = """
         border-radius: 16px;
         padding: 2rem;
         height: 100%;
+        box-sizing: border-box;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         transition: all 0.2s ease;
     }
@@ -124,6 +147,27 @@ SHARED_CSS = """
         transform: translateY(-4px);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
         border-color: #0d9488;
+    }
+
+    /* Equal-height columns — stretch to tallest child */
+    [data-testid="stHorizontalBlock"] {
+        align-items: stretch !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > div {
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] .feature-card {
+        flex: 1 !important;
     }
     
     .feature-icon {
@@ -263,38 +307,77 @@ SHARED_CSS = """
         box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1) !important;
     }
     
-    /* Button styling - teal primary */
-    .stButton > button {
+    /* Button styling - teal primary
+       Cover both old (.stButton > button) and new (data-testid) Streamlit selectors */
+    .stButton > button,
+    [data-testid="stBaseButton-primary"],
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="stButton"] > button,
+    button[kind="primary"],
+    button[kind="secondary"] {
         background: #0d9488 !important;
-        color: white !important;
+        color: #ffffff !important;
         font-weight: 600 !important;
-        padding: 0.75rem 2rem !important;
+        padding: 0.6rem 1.5rem !important;
         border-radius: 8px !important;
         border: none !important;
-        font-size: 1rem !important;
+        font-size: 1.05rem !important;
         transition: all 0.2s ease !important;
     }
-    
-    .stButton > button:hover {
+
+    .stButton > button:hover,
+    [data-testid="stBaseButton-primary"]:hover,
+    [data-testid="stBaseButton-secondary"]:hover {
         background: #0f766e !important;
-        transform: translateY(-1px) !important;
         box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3) !important;
     }
-    
-    /* Secondary buttons */
-    .stButton > button[kind="secondary"] {
-        background: transparent !important;
-        color: #0d9488 !important;
-        border: 2px solid #0d9488 !important;
+
+    /* Force button label text white — overrides the global stMarkdown p / element-container rules.
+       Uses stacked specificity to beat all other color rules. */
+    div[data-testid="stButton"] button p,
+    div[data-testid="stButton"] button span,
+    div[data-testid="stButton"] button div,
+    div[data-testid="stButton"] > button,
+    .stButton > button > div,
+    .stButton > button > div > p,
+    .stButton > button p,
+    .stButton > button span,
+    [data-testid="stBaseButton-primary"] p,
+    [data-testid="stBaseButton-primary"] span,
+    [data-testid="stBaseButton-secondary"] p,
+    [data-testid="stBaseButton-secondary"] span {
+        color: #ffffff !important;
+        font-size: 1.05rem !important;
+        font-weight: 600 !important;
     }
     
-    /* Page link buttons */
-    .stPageLink > a {
+    /* Page link buttons — cover all Streamlit versions */
+    .stPageLink > a,
+    [data-testid="stPageLink"] > a,
+    [data-testid="stPageLink"] a,
+    div[data-testid="stPageLink"] a {
+        display: block !important;
         background: #0d9488 !important;
-        color: white !important;
+        color: #ffffff !important;
         border-radius: 8px !important;
         padding: 0.75rem 1.5rem !important;
         font-weight: 600 !important;
+        font-size: 1rem !important;
+        text-align: center !important;
+        text-decoration: none !important;
+    }
+
+    .stPageLink > a:hover,
+    [data-testid="stPageLink"] a:hover {
+        background: #0f766e !important;
+        color: #ffffff !important;
+    }
+
+    /* Ensure page link inner text is white */
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color: #ffffff !important;
     }
     
     /* Expander styling */
@@ -401,9 +484,37 @@ SHARED_CSS = """
     }
     
     /* Select boxes */
-    .stSelectbox > div > div {
+    .stSelectbox > div > div,
+    [data-testid="stSelectbox"] > div > div,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         border-color: #d1d5db !important;
+        color: #1a1a2e !important;
+    }
+
+    /* Selectbox selected value text */
+    [data-testid="stSelectbox"] span,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] span,
+    [data-testid="stSelectbox"] input,
+    .stSelectbox span,
+    .stSelectbox input {
+        color: #1a1a2e !important;
+    }
+
+    /* Selectbox dropdown menu options */
+    [data-baseweb="popover"] li,
+    [data-baseweb="popover"] span,
+    [data-baseweb="menu"] li,
+    [data-baseweb="menu"] span,
+    ul[data-testid="stSelectboxVirtualDropdown"] li,
+    ul[data-testid="stSelectboxVirtualDropdown"] span {
+        color: #1a1a2e !important;
+        background-color: #ffffff !important;
+    }
+
+    [data-baseweb="popover"] li:hover,
+    [data-baseweb="menu"] li:hover {
+        background-color: #f0fdf4 !important;
     }
     
     /* Radio buttons */
@@ -475,13 +586,13 @@ SHARED_CSS = """
         text-decoration: underline;
     }
     
-    /* Markdown text color fix */
-    .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+    /* Markdown text color fix — exclude buttons */
+    .stMarkdown p, .stMarkdown li, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         color: #1a1a2e !important;
     }
-    
-    /* Override any remaining dark text */
-    .element-container {
+
+    /* Scoped to non-button containers */
+    .element-container:not(:has(button)) {
         color: #1a1a2e !important;
     }
 </style>

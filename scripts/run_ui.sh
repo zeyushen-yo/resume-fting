@@ -24,5 +24,5 @@ if [ -z "$OPENROUTER_API_KEY" ]; then
 fi
 
 # Run Streamlit app (using ui_draft)
-streamlit run ui_draft/app.py --server.port 8501 --server.address 0.0.0.0
+streamlit run ui/Resume_Screening_Validity.py --server.port 8501 --server.address 0.0.0.0
 

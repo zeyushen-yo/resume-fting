@@ -30,5 +30,5 @@ ENV PORT=8501
 EXPOSE 8501
 
 # Use ENTRYPOINT with shell to handle $PORT
-ENTRYPOINT ["/bin/sh", "-c", "exec streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
+ENTRYPOINT ["/bin/sh", "-c", "exec streamlit run Resume_Screening_Validity.py --server.port=$PORT --server.address=0.0.0.0"]
 

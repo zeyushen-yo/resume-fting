@@ -81,7 +81,7 @@ resume-fting/
 │   └── check_decision_samples.py  # Spot-check raw model outputs
 │
 ├── data/
-│   ├── harvest_top10/             # Pre-harvested postings by role
+│   ├── top_jobs/             # Pre-harvested postings by role
 │   │   ├── software_engineer/
 │   │   ├── data_scientist/
 │   │   └── ...                    # 10 roles total
@@ -154,20 +154,20 @@ python -m resume_validity.scrape.harvest_pass_postings \
     --require_basic 3 \
     --require_bonus 3 \
     --per_role_target 100 \
-    --out_dir data/harvest_top10
+    --out_dir data/top_jobs
 ```
 
 This script:
 1. Fetches job pages from Greenhouse APIs
 2. For each posting, calls Gemini to extract `basic` (required) and `bonus` (preferred) qualifications
 3. Filters out postings that don't meet the minimum qualification counts
-4. Saves passing postings to `data/harvest_top10/<role>/passing_<role>.jsonl`
+4. Saves passing postings to `data/top_jobs/<role>/passing_<role>.jsonl`
 
-Pre-harvested postings for 10 roles are already in `data/harvest_top10/`:
+Pre-harvested postings for 10 roles are already in `data/top_jobs/`:
 `software_engineer`, `data_scientist`, `ml_engineer`, `devops_engineer`, `product_manager`, `financial_analyst`, `sales_representative`, `hr_specialist`, `customer_support`, `retail_associate`.
 
 **Manually adding new jobs**:
-You can add new jobs by finding job descriptions of interest, then pasting the source and qualifications in a `.jsonl` format as in `/non_cs_jobs`.
+You can add new jobs by finding job descriptions of interest, then pasting the source and qualifications in a `.jsonl` format as in `data/top_jobs`.
 
 
 ### Step 2: Build Resume Pairs
@@ -177,7 +177,7 @@ Given harvested postings, this step generates actual resume text and constructs 
 **Primary builder (Claude via OpenRouter, from harvest):**
 ```bash
 python -m resume_validity.build.build_pairs_from_harvest \
-    --harvest_dir data/harvest_top10 \
+    --harvest_dir data/top_jobs \
     --out data/pairs_all.jsonl \
     --model anthropic/claude-sonnet-4 \
     --max_per_role 100
